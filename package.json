@@ -1,0 +1,26 @@
+{
+  "name": "s3-website-deploy",
+  "version": "1.0.0",
+  "description": "For deploying FE artefacts to a S3 website hosting frontend by Cloudfront",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:mediafellows/s3-website-deploy.git"
+  },
+  "keywords": [
+    "deploy"
+  ],
+  "author": "Stefan Horning",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mediafellows/s3-website-deploy/issues"
+  },
+  "homepage": "https://github.com/mediafellows/s3-website-deploy#readme",
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.731.1",
+    "@aws-sdk/client-s3": "^3.731.1"
+  }
+}
