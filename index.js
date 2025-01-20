@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
 import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
@@ -204,14 +204,14 @@ async function deploy(domains, localDirectory) {
     await cleanupS3Bucket(bucketName)
 
     // 4. Upload new files to s3
-    uploadDirectoryToS3(localDirectory, buckeName)
-      .then(() => console.log(`Upload completed to ${buckeName}`))
+    await uploadDirectoryToS3(localDirectory, bucketName)
+      .then(() => console.log(`Upload completed to ${bucketName}`))
       .catch((err) => console.error("Error during upload:", err));
   }
 
   // 5. Invalidate Cloudfront caches to ensure new content is served
   for (const id of cfIds) {
-    createInvalidation(id)
+    await createInvalidation(id)
   }
 }
 
