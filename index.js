@@ -193,12 +193,17 @@ async function deploy(domains, localDirectory) {
 
   console.log(`Found following CF attached bucket names: ${new Array(...bucketNames).join(' ')}`);
 
-  // 3. Cleanup s3 bucket (i.e. delete all present files)
-  cleanupS3Bucket(bucketName)
+  if (bucketNames.size > 1) {
+    console.warn("Are you ensure you want to push your artefacts to more then one bucket? Hit Ctr+C to abort now!")
+    await new Promise(r => setTimeout(r, 5000));
+  }
 
-  // 4. Upload new files to s3
   console.log(`Will upload to to buckets from local dir: ${localDirectory}`);
   for (const bucketName of bucketNames) {
+    // 3. Cleanup s3 bucket (i.e. delete all present files)
+    await cleanupS3Bucket(bucketName)
+
+    // 4. Upload new files to s3
     uploadDirectoryToS3(localDirectory, buckeName)
       .then(() => console.log(`Upload completed to ${buckeName}`))
       .catch((err) => console.error("Error during upload:", err));
