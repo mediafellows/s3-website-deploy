@@ -4,6 +4,13 @@ import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
 import * as fs from "fs";
 
+
+// TODO:
+// - Wrap code into class like s3WebsiteDeploy or so
+// - Check method definitions if all need to be async
+// - Make some methods private?
+// - Fix upload mime type (currently wrong type for html files at least)
+
 // Cloudfront Client
 const cfClient = new CloudFrontClient({ region: "us-east-1" }); // CloudFront is global, but you can still set a default region
 
@@ -100,7 +107,7 @@ async function uploadDirectoryToS3(dir, bucketName) {
 
     if (fileStat.isDirectory()) {
       // Recursively upload subdirectory
-      await uploadDirectoryToS3(filePath, join(s3Prefix, file));
+      await uploadDirectoryToS3(filePath, bucketName);
     } else {
       // Upload file
       const fileStream = fs.createReadStream(filePath);
@@ -124,6 +131,7 @@ async function uploadDirectoryToS3(dir, bucketName) {
   }
 }
 
+// Cleanup S3 bucket by finding all files and removing them
 async function cleanupS3Bucket(bucketName) {
   let continuationToken;
   let hasMore = true;
