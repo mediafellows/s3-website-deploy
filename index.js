@@ -2,6 +2,7 @@ import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand 
 import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
 import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
+import mime from "mime";
 import * as fs from "fs";
 
 
@@ -95,11 +96,10 @@ const s3Client = new S3Client({ region });
 /**
  * Recursively upload files from a local directory to S3.
  * @param {string} dir - The local directory path.
- * @param {string} buckeName - bucket name to upload to
+ * @param {string} s3Prefix - S3 key prefix (folder path in the bucket).
  */
-async function uploadDirectoryToS3(dir, bucketName) {
+async function uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
   const files = await readdir(dir);
-  const s3Prefix = ""
 
   for (const file of files) {
     const filePath = join(dir, file);
@@ -107,10 +107,11 @@ async function uploadDirectoryToS3(dir, bucketName) {
 
     if (fileStat.isDirectory()) {
       // Recursively upload subdirectory
-      await uploadDirectoryToS3(filePath, bucketName);
+      await uploadDirectoryToS3(filePath, bucketName, join(s3Prefix, file));
     } else {
       // Upload file
       const fileStream = fs.createReadStream(filePath);
+      const mimeType = mime.getType(filePath) || "application/octet-stream";
       const s3Key = join(s3Prefix, file);
 
       console.log(`Uploading ${filePath} to s3://${bucketName}/${s3Key}`);
@@ -119,6 +120,7 @@ async function uploadDirectoryToS3(dir, bucketName) {
         Bucket: bucketName,
         Key: s3Key.replace(/\\/g, "/"), // Ensure S3 key uses forward slashes
         Body: fileStream,
+        ContentType: mimeType, // Set the MIME type
       };
 
       try {
@@ -183,7 +185,6 @@ async function cleanupS3Bucket(bucketName) {
 
   console.log("Finished cleaning bucket.");
 }
-
 
 // Wrapper method to do all steps
 async function deploy(domains, localDirectory) {
