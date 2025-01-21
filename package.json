@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+git@github.com:mediafellows/s3-website-deploy.git"
+    "url": "git+ssh://git@github.com/mediafellows/s3-website-deploy.git"
   },
   "keywords": [
     "deploy"

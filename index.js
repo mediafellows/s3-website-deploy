@@ -235,4 +235,4 @@ async function deploy(domains, localDirectory) {
 }
 
 // Example call
-deploy(['test.buyer.mediastore.dev'], 'dist/')
+// deploy(['test.com'], 'dist/')
