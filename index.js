@@ -1,16 +1,15 @@
 import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
 import { readdir, stat } from "fs/promises";
 import { join, relative } from "path";
 import mime from "mime";
 import * as fs from "fs";
 
-
 // TODO:
 // - Wrap code into class like s3WebsiteDeploy or so
 // - Check method definitions if all need to be async
 // - Make some methods private?
-// - Fix upload mime type (currently wrong type for html files at least)
 
 // Cloudfront Client
 const cfClient = new CloudFrontClient({ region: "us-east-1" }); // CloudFront is global, but you can still set a default region
@@ -82,7 +81,7 @@ async function createInvalidation(distributionId) {
 
   try {
     const response = await cfClient.send(command);
-    console.log("Invalidation created:", response.Invalidation.Id);
+    console.log("Cloudfront invalidation created:", response.Invalidation.Id);
   } catch (error) {
     console.error("Error creating invalidation:", error);
   }
@@ -92,46 +91,6 @@ async function createInvalidation(distributionId) {
 // AWS S3 Configuration
 const region = "us-east-1"; // autodetect?
 const s3Client = new S3Client({ region });
-
-/**
- * Recursively upload files from a local directory to S3.
- * @param {string} dir - The local directory path.
- * @param {string} s3Prefix - S3 key prefix (folder path in the bucket).
- */
-async function uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
-  const files = await readdir(dir);
-
-  for (const file of files) {
-    const filePath = join(dir, file);
-    const fileStat = await stat(filePath);
-
-    if (fileStat.isDirectory()) {
-      // Recursively upload subdirectory
-      await uploadDirectoryToS3(filePath, bucketName, join(s3Prefix, file));
-    } else {
-      // Upload file
-      const fileStream = fs.createReadStream(filePath);
-      const mimeType = mime.getType(filePath) || "application/octet-stream";
-      const s3Key = join(s3Prefix, file);
-
-      console.log(`Uploading ${filePath} to s3://${bucketName}/${s3Key}`);
-
-      const uploadParams = {
-        Bucket: bucketName,
-        Key: s3Key.replace(/\\/g, "/"), // Ensure S3 key uses forward slashes
-        Body: fileStream,
-        ContentType: mimeType, // Set the MIME type
-      };
-
-      try {
-        await s3Client.send(new PutObjectCommand(uploadParams));
-        console.log(`Uploaded: ${s3Key}`);
-      } catch (error) {
-        console.error(`Failed to upload ${s3Key}:`, error);
-      }
-    }
-  }
-}
 
 // Cleanup S3 bucket by finding all files and removing them
 async function cleanupS3Bucket(bucketName) {
@@ -153,7 +112,7 @@ async function cleanupS3Bucket(bucketName) {
       if (listResponse.Contents && listResponse.Contents.length > 0) {
         // Print found objects
         listResponse.Contents.forEach((item) => {
-          console.log(`Found: ${item.Key} (${item.Size} bytes)`);
+          // console.log(`Found: ${item.Key} (${item.Size} bytes)`);
         });
 
         // Prepare objects for deletion
@@ -186,6 +145,48 @@ async function cleanupS3Bucket(bucketName) {
   console.log("Finished cleaning bucket.");
 }
 
+/**
+ * Recursively upload files from a local directory to S3.
+ * @param {string} dir - The local directory path.
+ * @param {string} s3Prefix - S3 key prefix (folder path in the bucket).
+ */
+async function uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
+  const files = await readdir(dir);
+
+  for (const file of files) {
+    const filePath = join(dir, file);
+    const fileStat = await stat(filePath);
+
+    if (fileStat.isDirectory()) {
+      // Recursively upload subdirectory
+      await uploadDirectoryToS3(filePath, bucketName, join(s3Prefix, file));
+    } else {
+      // Upload file
+      const fileStream = fs.createReadStream(filePath);
+      const mimeType = mime.getType(filePath) || "application/octet-stream";
+      const s3Key = join(s3Prefix, file);
+
+      console.log(`Uploading ${filePath} to s3://${bucketName}/${s3Key}`);
+
+      const uploadParams = {
+        Bucket: bucketName,
+        Key: s3Key.replace(/\\/g, "/"), // Ensure S3 key uses forward slashes
+        Body: fileStream,
+        ContentType: mimeType, // Set the MIME type
+      };
+
+      const resp = new Upload({ client: s3Client, params: uploadParams });
+
+      try {
+        await resp.done();
+        // console.log(`Uploaded: ${s3Key}`);
+      } catch (error) {
+        console.error(`Failed to upload ${s3Key}:`, error);
+      }
+    }
+  }
+}
+
 // Wrapper method to do all steps
 async function deploy(domains, localDirectory) {
   // 1. Find Cloudfront distributions for given list of domains
@@ -207,21 +208,30 @@ async function deploy(domains, localDirectory) {
     await new Promise(r => setTimeout(r, 5000));
   }
 
+  console.log("");
   console.log(`Will upload to to buckets from local dir: ${localDirectory}`);
+  console.log("");
+
   for (const bucketName of bucketNames) {
     // 3. Cleanup s3 bucket (i.e. delete all present files)
     await cleanupS3Bucket(bucketName)
+    console.log("");
 
     // 4. Upload new files to s3
     await uploadDirectoryToS3(localDirectory, bucketName)
-      .then(() => console.log(`Upload completed to ${bucketName}`))
+      .then(() => console.log(`Upload completed to ${bucketName} bucket`))
       .catch((err) => console.error("Error during upload:", err));
   }
+
+  console.log("");
 
   // 5. Invalidate Cloudfront caches to ensure new content is served
   for (const id of cfIds) {
     await createInvalidation(id)
   }
+
+  console.log("");
+  console.log("All done");
 }
 
 // Example call
