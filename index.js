@@ -183,7 +183,8 @@ async function uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
 }
 
 // Wrapper method to do all steps
-/* eslint-disable no-unused-vars */
+// Example call
+// deploy(['test.com'], 'dist/')
 async function deploy(domains, localDirectory) {
   // 1. Find Cloudfront distributions for given list of domains
   const cfIds = await getDistributionsForDomains(domains)
@@ -229,7 +230,5 @@ async function deploy(domains, localDirectory) {
   console.log("");
   console.log("All done");
 }
-/* eslint-enable no-unused-vars */
 
-// Example call
-// deploy(['test.com'], 'dist/')
+export { deploy };
