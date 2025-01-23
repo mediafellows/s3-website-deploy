@@ -1,6 +1,6 @@
 {
   "name": "@mediafellows/s3-website-deploy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "For deploying FE artefacts to a S3 website hosting frontend by Cloudfront",
   "main": "index.js",
   "type": "module",
