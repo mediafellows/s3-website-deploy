@@ -15,3 +15,52 @@ This deploy takes care of those steps:
 5. Invalidates Cloudfront cache(s) to ensure new content is served
 
 You can provide a list of domains as you might want to upload the same artefacts for multiple Cloudfront distributions (or even buckets), in case you serve them with distributions for TLS cert reasons.
+
+## Install and usage
+
+To install from GH repo you need to add this to your `.npmrc` first:
+```
+@mediafellows:registry=https://npm.pkg.github.com/
+```
+
+After that you can install the package with either npm or yarn like this:
+```
+npm install @mediafellows/s3-website-deploy@1.0.0
+```
+
+Once installed you can include the website deploy method like this:
+
+```javascript
+import { deploy } from '@mediafellows/s3-website-deploy';
+
+// some other code
+
+// If you have multiple AWS credentials profiles setup select the one you want like this:
+AWS.config.credentials = new AWS.SharedIniFileCredentials({ profile: 'my_credenials_profile' });
+
+
+const buildDir = "dist/"
+// domains used to select all the Cloudfront distros in question, one domain per CF distro is enough to select them
+const domains = ['my-domain.bar', 'another-doman.com']
+
+await deploy(domains, buildDir)
+```
+
+This will run the deploy for you, as desribed above. You AWS credentials should have the following permissions.
+
+On relevant buckets:
+```
+"s3:List*"
+"s3:Get*"
+"s3:Put*"
+"s3:DeleteObject"
+```
+
+On relevant Cloudfront distribtions:
+```
+"cloudfront:CreateInvalidation"
+"cloudfront:GetDistribution"
+"cloudfront:GetDistributionConfig"
+"cloudfront:GetInvalidation"
+"cloudfront:List*"
+```

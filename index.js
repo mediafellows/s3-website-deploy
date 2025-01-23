@@ -1,8 +1,8 @@
-import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
 import { readdir, stat } from "fs/promises";
-import { join, relative } from "path";
+import { join } from "path";
 import mime from "mime";
 import * as fs from "fs";
 
@@ -110,11 +110,6 @@ async function cleanupS3Bucket(bucketName) {
       const listResponse = await s3Client.send(listCommand);
 
       if (listResponse.Contents && listResponse.Contents.length > 0) {
-        // Print found objects
-        listResponse.Contents.forEach((item) => {
-          // console.log(`Found: ${item.Key} (${item.Size} bytes)`);
-        });
-
         // Prepare objects for deletion
         const objectsToDelete = listResponse.Contents.map((item) => ({ Key: item.Key }));
 
@@ -188,6 +183,7 @@ async function uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
 }
 
 // Wrapper method to do all steps
+/* eslint-disable no-unused-vars */
 async function deploy(domains, localDirectory) {
   // 1. Find Cloudfront distributions for given list of domains
   const cfIds = await getDistributionsForDomains(domains)
@@ -233,6 +229,7 @@ async function deploy(domains, localDirectory) {
   console.log("");
   console.log("All done");
 }
+/* eslint-enable no-unused-vars */
 
 // Example call
 // deploy(['test.com'], 'dist/')
