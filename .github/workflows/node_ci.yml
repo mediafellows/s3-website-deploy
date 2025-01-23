@@ -1,0 +1,29 @@
+name: NodeJS package CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+    steps:
+
+      - name: Clone from Github
+        uses: actions/checkout@v4
+
+      - name: Install Node.js version ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run npm install
+        run: npm install
+
+      - name: Run CI
+        run: linting

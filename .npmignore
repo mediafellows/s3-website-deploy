@@ -1,0 +1,4 @@
+node_modules/**/*
+dist/*
+.github/**/*
+eslint.config.js
