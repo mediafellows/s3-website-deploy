@@ -26,4 +26,4 @@ jobs:
         run: npm install
 
       - name: Run CI
-        run: linting
+        run: npx eslint index.js
