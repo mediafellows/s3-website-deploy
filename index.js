@@ -1,11 +1,11 @@
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
-import { Slack } from 'slack-node';
+import { IncomingWebhook } from '@slack/webhook';
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
-import { mime } from "mime";
-import { * as fs } from "fs";
+import mime from "mime";
+import * as fs from "fs";
 
 class S3WebsiteDeploy {
   /**
@@ -18,15 +18,12 @@ class S3WebsiteDeploy {
     console.log(`Using AWS profile ${awsProfile} and region ${awsRegion}`);
 
     this.cfClient = new CloudFrontClient({ profile: awsProfile, region: awsRegion }); // CloudFront is global, but you can still set a default region// AWS S3 Configuration
-    this.s3Client = new S3Client({ region: region, profile: profile });
-    this.slack = new Slack();
-    if (slackUrl.length > 5) {
-      slack.setWebhook(slackUrl);
-    }
+    this.s3Client = new S3Client({ region: awsRegion, profile: awsProfile });
+    this.slackUrl = slackUrl;
   }
 
   // Get Cloudfront Ids for a given domain alias
-  getDistributionsForDomains(cfDomains) {
+  async getDistributionsForDomains(cfDomains) {
     const uniqueCfIds = new Set();
     let distributions;
     let dist;
@@ -63,7 +60,7 @@ class S3WebsiteDeploy {
   }
 
   // Get distribution details for specific Cloudfront ID
-  getDistribution(distributionId) {
+  async getDistribution(distributionId) {
     try {
       const command = new GetDistributionCommand({ Id: distributionId });
       const response = await this.cfClient.send(command);
@@ -76,7 +73,7 @@ class S3WebsiteDeploy {
   }
 
   // Create Cloudfront invalidation for given CF id
-  createInvalidation(distributionId) {
+  async createInvalidation(distributionId) {
     const paths = ['/*'] // simply invalidate all files
     const timestamp = Date.now().toString(); // Unique ID for the invalidation
     const command = new CreateInvalidationCommand({
@@ -95,11 +92,12 @@ class S3WebsiteDeploy {
       console.log("Cloudfront invalidation created:", response.Invalidation.Id);
     } catch (error) {
       console.error("Error creating invalidation:", error);
+      process.exit(1);
     }
   }
 
   // Cleanup S3 bucket by finding all files and removing them
-  cleanupS3Bucket(bucketName) {
+  async cleanupS3Bucket(bucketName) {
     let continuationToken;
     let hasMore = true;
 
@@ -139,6 +137,7 @@ class S3WebsiteDeploy {
         }
       } catch (error) {
         console.error("Error processing bucket contents:", error);
+        process.exit(1);
         break;
       }
     }
@@ -147,7 +146,7 @@ class S3WebsiteDeploy {
   }
 
   // Recursively upload files from a local directory to S3.
-  uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
+  async uploadDirectoryToS3(dir, bucketName, s3Prefix = "") {
     const files = await readdir(dir);
 
     for (const file of files) {
@@ -156,7 +155,7 @@ class S3WebsiteDeploy {
 
       if (fileStat.isDirectory()) {
         // Recursively upload subdirectory
-        await uploadDirectoryToS3(filePath, bucketName, join(s3Prefix, file));
+        await this.uploadDirectoryToS3(filePath, bucketName, join(s3Prefix, file));
       } else {
         // Upload file
         const fileStream = fs.createReadStream(filePath);
@@ -179,6 +178,7 @@ class S3WebsiteDeploy {
           // console.log(`Uploaded: ${s3Key}`);
         } catch (error) {
           console.error(`Failed to upload ${s3Key}:`, error);
+          process.exit(1);
         }
       }
     }
@@ -188,14 +188,17 @@ class S3WebsiteDeploy {
   * @param {array} domains            List of domains to deploy to (at leat one per Cloudfront distribution to match deploy targets)
   * @param {string} localDirectory    Directory that contains the artefacts to deploy, point your build output there
   */
-  deploy(domains, localDirectory) {
+  async deploy(domains, localDirectory) {
+    console.log('')
+    console.log(`=== Starting deploy for domains: ${new Array(...domains).join(', ')} ===`);
+
     // 1. Find Cloudfront distributions for given list of domains
-    const cfIds = this.getDistributionsForDomains(domains)
+    const cfIds = await this.getDistributionsForDomains(domains)
 
     // 2. Extract bucket names from Cloudfront distributions
     const bucketNames = new Set();
     for (const id of cfIds) {
-      const distribution = this.getDistribution(id)
+      const distribution = await this.getDistribution(id)
       const s3Domain = distribution.DistributionConfig.Origins.Items[0].DomainName;
       const bucketName = s3Domain.split('.')[0];
       bucketNames.add(bucketName)
@@ -214,30 +217,35 @@ class S3WebsiteDeploy {
 
     for (const bucketName of bucketNames) {
       // 3. Cleanup s3 bucket (i.e. delete all present files)
-      this.cleanupS3Bucket(bucketName)
+      await this.cleanupS3Bucket(bucketName)
       console.log("");
 
       // 4. Upload new files to s3
-      this.uploadDirectoryToS3(localDirectory, bucketName)
+      await this.uploadDirectoryToS3(localDirectory, bucketName)
         .then(() => console.log(`Upload completed to ${bucketName} bucket`))
-        .catch((err) => console.error("Error during upload:", err));
+        .catch((err) => {
+          console.error("Error during upload:", err);
+          process.exit(1);
+        });
     }
 
     console.log("");
 
     // 5. Invalidate Cloudfront caches to ensure new content is served
     for (const id of cfIds) {
-      this.createInvalidation(id)
+      await this.createInvalidation(id)
     }
 
     console.log("");
     console.log("All done");
 
     // 6. Send Slack message
-    this.slack.webhook({ text: `successfully deployed UI for domains: ${new Array(...domains).join(', ')}` },
-     function(err, response) {
-      console.error(`Sending Slack message failed, reason: ${response}`);
-    });
+    const slack = new IncomingWebhook(this.slackUrl);
+    try {
+      await slack.send({ text: `successfully deployed UI for domains: ${new Array(...domains).join(', ')}` });
+    } catch (error) {
+      console.error("Failed to send Slack message:", error.message)
+    }
   }
 }
 
