@@ -31,19 +31,27 @@ npm install @mediafellows/s3-website-deploy@1.0.0
 Once installed you can include the website deploy method like this:
 
 ```javascript
-import { deploy } from '@mediafellows/s3-website-deploy';
+import { S3WebsiteDeploy } from '@mediafellows/s3-website-deploy';
 
 // some other code
 
-// If you have multiple AWS credentials profiles setup select the one you want like this:
-AWS.config.credentials = new AWS.SharedIniFileCredentials({ profile: 'my_credenials_profile' });
+// name of the AWS profile configured in ~/.aws/credentials to be used to the deploy
+const awsProfile = 'production'
+// AWS s3 bucket region
+const awsRegion = 'us-east-1'
+// Slack secret webhook URL (optional) to send deploy message to
+const slackUrl = 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
 
+const deployer = new S3WebsiteDeploy.new(awsProfile, awsRegion, slackUrl)
 
+// dir with website artefacts to be uploaded to s3
 const buildDir = "dist/"
+
 // domains used to select all the Cloudfront distros in question, one domain per CF distro is enough to select them
 const domains = ['my-domain.bar', 'another-doman.com']
 
-await deploy(domains, buildDir)
+// Run deploy
+deployer.deploy(domains, buildDir)
 ```
 
 This will run the deploy for you, as desribed above. You AWS credentials should have the following permissions.
@@ -64,3 +72,5 @@ On relevant Cloudfront distribtions:
 "cloudfront:GetInvalidation"
 "cloudfront:List*"
 ```
+
+This module is meant to use configured credential profiles from `~/.aws/credentials`. But setting AWS ENV variables should also work.
