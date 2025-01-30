@@ -42,7 +42,7 @@ const awsRegion = 'us-east-1'
 // Slack secret webhook URL (optional) to send deploy message to
 const slackUrl = 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
 
-const deployer = new S3WebsiteDeploy.new(awsProfile, awsRegion, slackUrl)
+const deployer = new S3WebsiteDeploy(awsProfile, awsRegion, slackUrl)
 
 // dir with website artefacts to be uploaded to s3
 const buildDir = "dist/"
