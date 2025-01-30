@@ -72,3 +72,5 @@ On relevant Cloudfront distribtions:
 "cloudfront:GetInvalidation"
 "cloudfront:List*"
 ```
+
+This module is meant to use configured credential profiles from `~/.aws/credentials`. But setting AWS ENV variables should also work.
