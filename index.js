@@ -32,6 +32,10 @@ class S3WebsiteDeploy {
 
     for (const domain of cfDomains) {
       console.log(`Looking for domain ${domain} in CloudFront distributions...`);
+      // Making sure all variables are nulled, so no values are reused from previous iteration!
+      distributions = null;
+      dist = null;
+      marker = null;
       cfId = null;
 
       do {
@@ -39,6 +43,7 @@ class S3WebsiteDeploy {
         const command = new ListDistributionsCommand({ Marker: marker });
         distributions = await this.cfClient.send(command);
         dist = distributions.DistributionList.Items.find((item) => item.Aliases?.Items?.includes(domain));
+        // console.log(`dist: ${dist} | marker: ${marker}`);
         marker = distributions.DistributionList.NextMarker;
       } while (!dist && marker);
 
