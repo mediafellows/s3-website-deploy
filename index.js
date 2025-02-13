@@ -254,4 +254,8 @@ class S3WebsiteDeploy {
   }
 }
 
-export { S3WebsiteDeploy };
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { S3WebsiteDeploy }; // To support CommonJS require in older projects
+} else {
+  export { S3WebsiteDeploy }; // For ES module import
+}
