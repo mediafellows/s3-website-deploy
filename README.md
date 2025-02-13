@@ -74,3 +74,20 @@ On relevant Cloudfront distribtions:
 ```
 
 This module is meant to use configured credential profiles from `~/.aws/credentials`. But setting AWS ENV variables should also work.
+
+## Release
+To release a new npm package to Github npm repo follow these steps:
+
+1. Run `npm run build` to generate build artefacts in dist/ (to support both CommonJS and ESM import/requires)
+2. Bump version in package.json
+3. Run `npm install` to also update package.lock
+4. Commit everything to git (`git add . && git commit -m "New version" && git push`)
+4. Run `npm publish` pushes the file to the GH npm repo
+
+Now it can be installed in projects with
+
+`npm install -D @mediafellows/s3-website-deploy`
+
+Or with yarn if you prefer that.
+
+Suports `const S3WebsiteDeploy = require('@mediafellows/s3-website-deploy')` and `import { S3WebsiteDeploy} from '@mediafellows/s3-website-deploy'`
