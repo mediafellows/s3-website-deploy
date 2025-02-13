@@ -3,3 +3,5 @@ test/*
 .github/**/*
 eslint.config.js
 .babelrc
+test.js
+.tool-versions
