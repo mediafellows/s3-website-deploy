@@ -4,4 +4,5 @@ test/*
 eslint.config.js
 .babelrc
 test.js
+test.cjs
 .tool-versions
