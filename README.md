@@ -90,4 +90,4 @@ Now it can be installed in projects with
 
 Or with yarn if you prefer that.
 
-Suports `const S3WebsiteDeploy = require('@mediafellows/s3-website-deploy')` and `import { S3WebsiteDeploy} from '@mediafellows/s3-website-deploy'`
+Suports `const { S3WebsiteDeploy } = require('@mediafellows/s3-website-deploy')` and `import { S3WebsiteDeploy} from '@mediafellows/s3-website-deploy'`
