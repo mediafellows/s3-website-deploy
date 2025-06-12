@@ -93,7 +93,7 @@ class S3WebsiteDeploy {
     });
 
     try {
-      const response = await this.cfClient.send(command);
+      const response = await this.invalidateWithExponentialBackoff(command);
       console.log("Cloudfront invalidation created:", response.Invalidation.Id);
     } catch (error) {
       console.error("Error creating invalidation:", error);
@@ -251,6 +251,22 @@ class S3WebsiteDeploy {
     } catch (error) {
       console.error("Failed to send Slack message:", error.message)
     }
+  }
+
+  async invalidateWithExponentialBackoff(command) {
+    const maxRetries = 5;
+    let delay = 500;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return this.cfClient.send(command);
+      } catch (error) {
+        console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`, error);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+    throw new Error('Max retries reached');
   }
 }
 
