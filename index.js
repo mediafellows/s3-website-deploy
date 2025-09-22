@@ -259,7 +259,7 @@ class S3WebsiteDeploy {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        return this.cfClient.send(command);
+        return await this.cfClient.send(command);
       } catch (error) {
         console.log(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`, error);
         await new Promise(resolve => setTimeout(resolve, delay));
