@@ -1,30 +1,29 @@
 # S3 website deploy
 
-Provides a simple deploy method that hides all the complexity of deploying new frotend artefacts to a typical AWs S3 website hosting setup.
-Only works if the [s3-website setup](https://docs.aws.amazon.com/AmazonS3/latest/userguide/HostingWebsiteOnS3Setup.html) is fronted by [Cloudfront](https://repost.aws/knowledge-center/cloudfront-serve-static-website).
-Note that this can be achieved using usual infrastructure provisioners like Terraform, Cloudformation, Ansible etc. and is not the scope of this package.
+Provides a simple deploy method that hides the complexity of deploying new frontend artefacts to an AWS S3 website hosting setup.
+Only works if the AWS S3 bucket is fronted by a [multi-tenant CloudFront distribution](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-config-options.html#connection-mode). Note that this can be achieved using usual infrastructure provisioners like Terraform, Cloudformation, Ansible etc. and is not the scope of this package.
 
-All you have to to is to call the deploy method with the domain name(s) you want to update (i.e. Cloudfront alias) and the local dir of the Frontend
-artefacts that should be copied to S3.
+Call the deploy method with the S3 bucket name and the local directory containing the frontend artefacts. The package finds every multi-tenant CloudFront distribution that uses the bucket and invalidates all distribution tenants attached to those distributions.
 
 This deploy takes care of those steps:
-1. Find Cloudfront distributions for given domain(s)
-2. Extract bucket names from Cloudfront distribution(s)
-3. Cleanup of S3 bucket (i.e. delete all present files)
-4. Upload new files to S3 bucket(s)
-5. Invalidates Cloudfront cache(s) to ensure new content is served
 
-You can provide a list of domains as you might want to upload the same artefacts for multiple Cloudfront distributions (or even buckets), in case you serve them with distributions for TLS cert reasons.
+1. Find multi-tenant CloudFront distributions that use the S3 bucket
+2. Find all distribution tenants attached to those distributions
+3. Clean up the S3 bucket (i.e. delete all present files)
+4. Upload new files to the S3 bucket
+5. Invalidate every attached distribution tenant to ensure new content is served
 
 ## Install and usage
 
 To install from GH repo you need to add this to your `.npmrc` first:
-```
+
+```txt
 @mediafellows:registry=https://npm.pkg.github.com/
 ```
 
 After that you can install the package with either npm or yarn like this:
-```
+
+```sh
 npm install @mediafellows/s3-website-deploy@1.0.0
 ```
 
@@ -47,42 +46,54 @@ const deployer = new S3WebsiteDeploy(awsProfile, awsRegion, slackUrl)
 // dir with website artefacts to be uploaded to s3
 const buildDir = "dist/"
 
-// domains used to select all the Cloudfront distros in question, one domain per CF distro is enough to select them
-const domains = ['my-domain.bar', 'another-doman.com']
+// S3 bucket used as the origin of the multi-tenant CloudFront distribution
+const bucketName = 'my-website-assets'
 
 // Run deploy
-deployer.deploy(domains, buildDir)
+await deployer.deploy(bucketName, buildDir)
 ```
 
-This will run the deploy for you, as desribed above. You AWS credentials should have the following permissions.
+This will run the deploy for you, as described above. Your AWS credentials should have the following permissions.
 
 On relevant buckets:
-```
+
+```json
 "s3:List*"
 "s3:Get*"
 "s3:Put*"
 "s3:DeleteObject"
 ```
 
-On relevant Cloudfront distribtions:
-```
-"cloudfront:CreateInvalidation"
-"cloudfront:GetDistribution"
-"cloudfront:GetDistributionConfig"
-"cloudfront:GetInvalidation"
-"cloudfront:List*"
+On relevant CloudFront distributions and tenants:
+
+```json
+"cloudfront:ListDistributionsByConnectionMode"
+"cloudfront:ListDistributionTenants"
+"cloudfront:CreateInvalidationForDistributionTenant"
 ```
 
 This module is meant to use configured credential profiles from `~/.aws/credentials`. But setting AWS ENV variables should also work.
 
+## Dev setup
+
+To do development on this package setup things as follows:
+
+1. Install NodeJS in the version specified in .tool-versions (> 24)
+2. Run `npm install` to install depepdencies
+3. Run `npm test` to run the unit test (see test command defined in package.json)
+4. Make changes and keep rerunning tests.
+
+For releasing made changes see chappter below.
+
 ## Release
+
 To release a new npm package to Github npm repo follow these steps:
 
 1. Run `npm run build` to generate build artefacts in dist/ (to support both CommonJS and ESM import/requires)
 2. Bump version in package.json
 3. Run `npm install` to also update package.lock
 4. Commit everything to git (`git add . && git commit -m "New version" && git push`)
-4. Run `npm publish` pushes the file to the GH npm repo
+5. Run `npm publish` pushes the file to the GH npm repo
 
 Now it can be installed in projects with
 
