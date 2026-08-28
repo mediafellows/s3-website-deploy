@@ -1,7 +1,7 @@
 # S3 website deploy
 
 Provides a simple deploy method that hides the complexity of deploying new frontend artefacts to an AWS S3 website hosting setup.
-Only works if the AWS S3 bucket is fronted by a [multi-tenant CloudFront distribution](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-config-options.html#connection-mode). Note that this can be achieved using usual infrastructure provisioners like Terraform, Cloudformation, Ansible etc. and is not the scope of this package.
+Only works if the AWS S3 bucket is fronted by a [multi-tenant CloudFront distribution](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-config-options.html#connection-mode). Note that this can be achieved using usual infrastructure provisioners like Terraform, CloudFormation, Ansible etc. and is not the scope of this package.
 
 Call the deploy method with the S3 bucket name and the local directory containing the frontend artefacts. The package finds every multi-tenant CloudFront distribution that uses the bucket and invalidates all distribution tenants attached to those distributions.
 
@@ -24,7 +24,7 @@ To install from GH repo you need to add this to your `.npmrc` first:
 After that you can install the package with either npm or yarn like this:
 
 ```sh
-npm install @mediafellows/s3-website-deploy@1.0.0
+npm install @mediafellows/s3-website-deploy
 ```
 
 Once installed you can include the website deploy method like this:
@@ -57,7 +57,7 @@ This will run the deploy for you, as described above. Your AWS credentials shoul
 
 On relevant buckets:
 
-```json
+```txt
 "s3:List*"
 "s3:Get*"
 "s3:Put*"
@@ -79,19 +79,19 @@ This module is meant to use configured credential profiles from `~/.aws/credenti
 To do development on this package setup things as follows:
 
 1. Install NodeJS in the version specified in .tool-versions (> 24)
-2. Run `npm install` to install depepdencies
+2. Run `npm install` to install dependencies
 3. Run `npm test` to run the unit test (see test command defined in package.json)
 4. Make changes and keep rerunning tests.
 
-For releasing made changes see chappter below.
+For releasing made changes see chapter below.
 
 ## Release
 
-To release a new npm package to Github npm repo follow these steps:
+To release a new npm package to GitHub npm repo follow these steps:
 
 1. Run `npm run build` to generate build artefacts in dist/ (to support both CommonJS and ESM import/requires)
 2. Bump version in package.json
-3. Run `npm install` to also update package.lock
+3. Run `npm install` to also update package-lock.json
 4. Commit everything to git (`git add . && git commit -m "New version" && git push`)
 5. Run `npm publish` pushes the file to the GH npm repo
 
