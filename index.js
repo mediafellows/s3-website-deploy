@@ -1,6 +1,6 @@
 import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
-import { CloudFrontClient, ListDistributionsCommand, GetDistributionCommand, CreateInvalidationCommand } from "@aws-sdk/client-cloudfront";
+import { CloudFrontClient, ListDistributionsByConnectionModeCommand, ListDistributionTenantsCommand, CreateInvalidationForDistributionTenantCommand } from "@aws-sdk/client-cloudfront";
 import { IncomingWebhook } from '@slack/webhook';
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
@@ -22,67 +22,68 @@ class S3WebsiteDeploy {
     this.slackUrl = slackUrl;
   }
 
-  // Get Cloudfront Ids for a given domain alias
-  async getDistributionsForDomains(cfDomains) {
-    const uniqueCfIds = new Set();
-    let distributions;
-    let dist;
+  // Get multi-tenant CloudFront distribution IDs that use the given S3 bucket.
+  async getDistributionsForBucket(bucketName) {
+    const distributionIds = new Set();
     let marker;
-    let cfId;
 
-    for (const domain of cfDomains) {
-      console.log(`Looking for domain ${domain} in CloudFront distributions...`);
-      // Making sure all variables are nulled, so no values are reused from previous iteration!
-      distributions = null;
-      dist = null;
-      marker = null;
-      cfId = null;
+    console.log(`Looking for multi-tenant CloudFront distributions using bucket ${bucketName}...`);
 
-      do {
-        // Fetch distributions with the current marker, as results may be paginated
-        const command = new ListDistributionsCommand({ Marker: marker });
-        distributions = await this.cfClient.send(command);
-        dist = distributions.DistributionList.Items.find((item) => item.Aliases?.Items?.includes(domain));
-        // console.log(`dist: ${dist} | marker: ${marker}`);
-        marker = distributions.DistributionList.NextMarker;
-      } while (!dist && marker);
+    do {
+      const command = new ListDistributionsByConnectionModeCommand({
+        ConnectionMode: "tenant-only",
+        Marker: marker,
+      });
+      const response = await this.cfClient.send(command);
+      const distributionList = response.DistributionList;
 
-      if (!dist) {
-        console.error(`No CloudFront distribution found for domain ${domain}`);
-        continue;
+      for (const distribution of distributionList?.Items || []) {
+        const usesBucket = distribution.Origins?.Items?.some((origin) => this.originUsesBucket(origin.DomainName, bucketName));
+        if (usesBucket) {
+          distributionIds.add(distribution.Id);
+          console.log(`Found multi-tenant CloudFront distribution with ID: ${distribution.Id}`);
+        }
       }
 
-      cfId = dist.Id;
-      console.log(`Found CloudFront distribution with ID: ${cfId}`);
-      uniqueCfIds.add(cfId);
+      marker = distributionList?.NextMarker;
+    } while (marker);
+
+    if (distributionIds.size === 0) {
+      throw new Error(`No multi-tenant CloudFront distribution found for S3 bucket ${bucketName}`);
     }
 
-    if (uniqueCfIds.length === 0) {
-      console.log(`Found no Cloudfront distribution for any of the given domains ${cfDomains}`);
-      process.exit(1);
-    }
-    return uniqueCfIds;
+    return distributionIds;
   }
 
-  // Get distribution details for specific Cloudfront ID
-  async getDistribution(distributionId) {
-    try {
-      const command = new GetDistributionCommand({ Id: distributionId });
+  originUsesBucket(originDomain, bucketName) {
+    const escapedBucketName = bucketName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^${escapedBucketName}\\.s3(?:[.-][a-z0-9-]+)*\\.amazonaws\\.com(?:\\.cn)?$`, "i").test(originDomain);
+  }
+
+  // Get all tenants attached to a multi-tenant CloudFront distribution.
+  async getDistributionTenants(distributionId) {
+    const tenants = [];
+    let marker;
+
+    do {
+      const command = new ListDistributionTenantsCommand({
+        AssociationFilter: { DistributionId: distributionId },
+        Marker: marker,
+      });
       const response = await this.cfClient.send(command);
-      // console.log("Distribution Details:", response.Distribution);
-      return response.Distribution;
-    } catch (error) {
-      console.error("Error getting distribution details:", error);
-      process.exit(1);
-    }
+      tenants.push(...(response.DistributionTenantList || []));
+      marker = response.NextMarker;
+    } while (marker);
+
+    return tenants;
   }
 
-  // Create Cloudfront invalidation for given CF id
-  async createInvalidation(distributionId) {
+  // Create a CloudFront invalidation for a distribution tenant.
+  async createInvalidationForTenant(tenantId) {
     const paths = ['/*'] // simply invalidate all files
     const timestamp = Date.now().toString(); // Unique ID for the invalidation
-    const command = new CreateInvalidationCommand({
-      DistributionId: distributionId,
+    const command = new CreateInvalidationForDistributionTenantCommand({
+      Id: tenantId,
       InvalidationBatch: {
         CallerReference: timestamp,
         Paths: {
@@ -94,10 +95,9 @@ class S3WebsiteDeploy {
 
     try {
       const response = await this.invalidateWithExponentialBackoff(command);
-      console.log("Cloudfront invalidation created:", response.Invalidation.Id);
+      console.log(`CloudFront invalidation created for tenant ${tenantId}:`, response.Invalidation.Id);
     } catch (error) {
-      console.error("Error creating invalidation:", error);
-      process.exit(1);
+      throw new Error(`Error creating invalidation for tenant ${tenantId}`, { cause: error });
     }
   }
 
@@ -190,55 +190,44 @@ class S3WebsiteDeploy {
   }
 
   /** Wrapper method to do all deployment steps
-  * @param {array} domains            List of domains to deploy to (at leat one per Cloudfront distribution to match deploy targets)
+  * @param {string} bucketName        S3 bucket to deploy to
   * @param {string} localDirectory    Directory that contains the artefacts to deploy, point your build output there
   */
-  async deploy(domains, localDirectory) {
+  async deploy(bucketName, localDirectory) {
     console.log('')
-    console.log(`=== Starting deploy for domains: ${new Array(...domains).join(', ')} ===`);
+    console.log(`=== Starting deploy to S3 bucket: ${bucketName} ===`);
 
-    // 1. Find Cloudfront distributions for given list of domains
-    const cfIds = await this.getDistributionsForDomains(domains)
+    // 1. Find multi-tenant CloudFront distributions that use the bucket.
+    const distributionIds = await this.getDistributionsForBucket(bucketName)
 
-    // 2. Extract bucket names from Cloudfront distributions
-    const bucketNames = new Set();
-    for (const id of cfIds) {
-      const distribution = await this.getDistribution(id)
-      const s3Domain = distribution.DistributionConfig.Origins.Items[0].DomainName;
-      const bucketName = s3Domain.split('.')[0];
-      bucketNames.add(bucketName)
+    // 2. Find every tenant attached to those distributions before changing S3.
+    const tenants = [];
+    for (const distributionId of distributionIds) {
+      tenants.push(...await this.getDistributionTenants(distributionId));
     }
 
-    console.log(`Found following CF attached bucket names: ${new Array(...bucketNames).join(' ')}`);
-
-    if (bucketNames.size > 1) {
-      console.warn("Are you ensure you want to push your artefacts to more then one bucket? Hit Ctr+C to abort now!")
-      await new Promise(r => setTimeout(r, 5000));
+    if (tenants.length === 0) {
+      throw new Error(`No CloudFront distribution tenants found for S3 bucket ${bucketName}`);
     }
 
     console.log("");
-    console.log(`Will upload to to buckets from local dir: ${localDirectory}`);
+    console.log(`Found ${tenants.length} CloudFront distribution tenant(s)`);
+    console.log(`Will upload to bucket ${bucketName} from local dir: ${localDirectory}`);
     console.log("");
 
-    for (const bucketName of bucketNames) {
-      // 3. Cleanup s3 bucket (i.e. delete all present files)
-      await this.cleanupS3Bucket(bucketName)
-      console.log("");
+    // 3. Cleanup S3 bucket (i.e. delete all present files).
+    await this.cleanupS3Bucket(bucketName)
+    console.log("");
 
-      // 4. Upload new files to s3
-      await this.uploadDirectoryToS3(localDirectory, bucketName)
-        .then(() => console.log(`Upload completed to ${bucketName} bucket`))
-        .catch((err) => {
-          console.error("Error during upload:", err);
-          process.exit(1);
-        });
-    }
+    // 4. Upload new files to S3.
+    await this.uploadDirectoryToS3(localDirectory, bucketName)
+    console.log(`Upload completed to ${bucketName} bucket`)
 
     console.log("");
 
-    // 5. Invalidate Cloudfront caches to ensure new content is served
-    for (const id of cfIds) {
-      await this.createInvalidation(id)
+    // 5. Invalidate every tenant's cache to ensure new content is served.
+    for (const tenant of tenants) {
+      await this.createInvalidationForTenant(tenant.Id)
     }
 
     console.log("");
@@ -247,7 +236,7 @@ class S3WebsiteDeploy {
     // 6. Send Slack message
     const slack = new IncomingWebhook(this.slackUrl);
     try {
-      await slack.send({ text: `successfully deployed UI for domains: ${new Array(...domains).join(', ')}` });
+      await slack.send({ text: `successfully deployed UI to S3 bucket ${bucketName} and invalidated ${tenants.length} CloudFront tenant(s)` });
     } catch (error) {
       console.error("Failed to send Slack message:", error.message)
     }
