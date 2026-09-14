@@ -72,7 +72,28 @@ On relevant CloudFront distributions and tenants:
 "cloudfront:CreateInvalidationForDistributionTenant"
 ```
 
-This module is meant to use configured credential profiles from `~/.aws/credentials`. But setting AWS ENV variables should also work.
+The module uses the temporary environment credentials exported by `aws-actions/configure-aws-credentials` when `AWS_ACCESS_KEY_ID` is present. This includes the `AWS_SESSION_TOKEN` required by OIDC role sessions. Without environment credentials, it uses the configured profile argument from `~/.aws/credentials` for local deployments.
+
+For GitHub Actions, configure OIDC credentials before invoking the deploy task:
+
+```yaml
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    environment: mf_staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+      - run: npm run deploy
+```
+
+Do not set `AWS_PROFILE` in the GitHub Actions job. The credentials action supplies `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` automatically.
 
 ## Dev setup
 

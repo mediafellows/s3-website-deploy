@@ -21,6 +21,36 @@ function createDeployer(responses) {
   return { deployer, commands };
 }
 
+test("prefers temporary environment credentials over a local profile", async () => {
+  const originalCredentials = {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    sessionToken: process.env.AWS_SESSION_TOKEN,
+  };
+
+  process.env.AWS_ACCESS_KEY_ID = "OIDCTESTACCESS";
+  process.env.AWS_SECRET_ACCESS_KEY = "oidctestsecret";
+  process.env.AWS_SESSION_TOKEN = "oidctestsession";
+
+  try {
+    const deployer = new S3WebsiteDeploy("default", "us-east-1");
+    const credentials = await deployer.s3Client.config.credentials();
+
+    assert.equal(credentials.accessKeyId, "OIDCTESTACCESS");
+    assert.equal(credentials.secretAccessKey, "oidctestsecret");
+    assert.equal(credentials.sessionToken, "oidctestsession");
+  } finally {
+    for (const [name, value] of Object.entries(originalCredentials)) {
+      const environmentName = `AWS_${name.replace(/[A-Z]/g, (letter) => `_${letter}`).toUpperCase()}`;
+      if (value === undefined) {
+        delete process.env[environmentName];
+      } else {
+        process.env[environmentName] = value;
+      }
+    }
+  }
+});
+
 test("matches common S3 origin domain formats", () => {
   const deployer = Object.create(S3WebsiteDeploy.prototype);
 
