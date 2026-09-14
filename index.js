@@ -15,10 +15,17 @@ class S3WebsiteDeploy {
    * @param {string} slackUrl    The Slack webhook secret URL, if given will report deployment messages there
    */
   constructor(awsProfile = 'default', awsRegion = 'us-east-1', slackUrl){
-    console.log(`Using AWS profile ${awsProfile} and region ${awsRegion}`);
+    const usesEnvironmentCredentials = Boolean(process.env.AWS_ACCESS_KEY_ID);
+    const credentialSource = usesEnvironmentCredentials ? 'environment credentials' : `profile ${awsProfile}`;
+    console.log(`Using AWS ${credentialSource} and region ${awsRegion}`);
 
-    this.cfClient = new CloudFrontClient({ profile: awsProfile, region: awsRegion }); // CloudFront is global, but you can still set a default region// AWS S3 Configuration
-    this.s3Client = new S3Client({ region: awsRegion, profile: awsProfile });
+    const clientConfig = { region: awsRegion };
+    if (!usesEnvironmentCredentials && awsProfile) {
+      clientConfig.profile = awsProfile;
+    }
+
+    this.cfClient = new CloudFrontClient(clientConfig); // CloudFront is global, but you can still set a default region// AWS S3 Configuration
+    this.s3Client = new S3Client(clientConfig);
     this.slackUrl = slackUrl;
   }
 
